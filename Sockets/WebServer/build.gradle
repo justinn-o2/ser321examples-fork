@@ -1,27 +1,48 @@
-// set as java application
-apply plugin: 'application'
+plugins {
+    id 'application'
+}
 
-//define main class
-mainClassName = 'SimpleServer'
+application {
+    mainClass = 'funHttpServer.WebServer'
+}
+
+repositories {
+    mavenCentral() // This fixes the missing dependency issue
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
+        }
+    }
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17)) // Use Java 17
+    }
+}
+
+dependencies {
+    implementation 'org.json:json:20210307'
+}
 
 task SimpleWebServer(type: JavaExec) {
-  group 'http'
-  description 'Simple Http Demo'
-
-  classpath = sourceSets.main.runtimeClasspath
-
-  main = 'httpServer.WebServer'
-  standardInput = System.in
+    group 'http'
+    description 'Simple Http Demo'
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'httpServer.WebServer'
+    standardInput = System.in
 }
 
 task FunWebServer(type: JavaExec) {
-  group 'http'
-  description 'Simple Http Demo'
-
-  classpath = sourceSets.main.runtimeClasspath
-
-  main = 'funHttpServer.WebServer'
-  standardInput = System.in
+    group 'http'
+    description 'Simple Http Demo'
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'funHttpServer.WebServer'
+    standardInput = System.in
 }
-
-

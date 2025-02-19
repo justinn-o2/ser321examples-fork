@@ -26,6 +26,9 @@ import java.util.Map;
 import java.util.LinkedHashMap;
 import java.nio.charset.Charset;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 class WebServer {
   public static void main(String args[]) {
     WebServer server = new WebServer(9000);
@@ -193,70 +196,180 @@ class WebServer {
             builder.append("\n");
             builder.append("File not found: " + file);
           }
-        } else if (request.contains("multiply?")) {
-          // This multiplies two numbers, there is NO error handling, so when
-          // wrong data is given this just crashes
+        } else if(request.contains("multiply?")) {
+          Map<String, String> query_pairs = splitQuery(request.replace("multiply?", ""));
 
-          Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-          // extract path parameters
-          query_pairs = splitQuery(request.replace("multiply?", ""));
+          if(!query_pairs.containsKey("num1") || !query_pairs.containsKey("num2")) {
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error: Missing 'num1' or 'num2' parameter");
+          } else {
+            try {
+              Integer num1 = Integer.parseInt(query_pairs.get("num1"));
+              Integer num2 = Integer.parseInt(query_pairs.get("num2"));
+              Integer result = num1 * num2;
 
-          // extract required fields from parameters
-          Integer num1 = Integer.parseInt(query_pairs.get("num1"));
-          Integer num2 = Integer.parseInt(query_pairs.get("num2"));
-
-          // do math
-          Integer result = num1 * num2;
-
-          // Generate response
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Result is: " + result);
-
-          // TODO: Include error handling here with a correct error code and
-          // a response that makes sense
-
+              builder.append("HTTP/1.1 200 OK\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Result is " + result);
+            } catch(NumberFormatException e) {
+              builder.append("HTTP/1.1 406 Not Acceptable\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Error: 'num1' and 'num2' must be valid inputs");
+            }
+          }
         } else if (request.contains("github?")) {
-          // pulls the query from the request and runs it with GitHub's REST API
-          // check out https://docs.github.com/rest/reference/
-          //
-          // HINT: REST is organized by nesting topics. Figure out the biggest one first,
-          //     then drill down to what you care about
-          // "Owner's repo is named RepoName. Example: find RepoName's contributors" translates to
-          //     "/repos/OWNERNAME/REPONAME/contributors"
+          Map<String, String> query_pairs = splitQuery(request.replace("github?", ""));
+      
+          if (!query_pairs.containsKey("query") || query_pairs.get("query").isEmpty()) {
+              builder.append("HTTP/1.1 400 Bad Request\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Error: Missing or invalid parameter");
+          } else {
+              String query = query_pairs.get("query");
+              String jsonResponse = fetchURL("https://api.github.com/" + query);
+      
+              if (jsonResponse == null || jsonResponse.isEmpty()) {
+                  builder.append("HTTP/1.1 500 Internal Server Error\n");
+                  builder.append("Content-Type: text/html; charset=utf-8\n");
+                  builder.append("\n");
+                  builder.append("Error: Unable to fetch data from GitHub");
+              } else {
+                  try {
+                      StringBuilder htmlResponse = new StringBuilder();
+                      htmlResponse.append("<html><head><title>GitHub Repos</title></head><body>");
+                      htmlResponse.append("<h2>GitHub Repositories</h2>");
+                      htmlResponse.append("<table border='1'><tr><th>Repo Name</th><th>ID</th><th>Owner</th></tr>");
+      
+                      String[] repos = jsonResponse.split("\\},\\{");
+                      
+                      for (String repo : repos) {
+                          String fullName = extractValue(repo, "\"full_name\":\"", "\"");
+                          String id = extractValue(repo, "\"id\":", ",");
+                          String ownerLogin = extractValue(repo, "\"login\":\"", "\"");
+      
+                          if (!fullName.isEmpty() && !id.isEmpty() && !ownerLogin.isEmpty()) {
+                              htmlResponse.append("<tr>");
+                              htmlResponse.append("<td>").append(fullName).append("</td>");
+                              htmlResponse.append("<td>").append(id).append("</td>");
+                              htmlResponse.append("<td>").append(ownerLogin).append("</td>");
+                              htmlResponse.append("</tr>");
+                          }
+                      }
+      
+                      htmlResponse.append("</table></body></html>");
+      
+                      builder.append("HTTP/1.1 200 OK\n");
+                      builder.append("Content-Type: text/html; charset=utf-8\n");
+                      builder.append("\n");
+                      builder.append(htmlResponse.toString());
+      
+                  } catch (Exception e) {
+                      builder.append("HTTP/1.1 500 Internal Server Error\n");
+                      builder.append("Content-Type: text/html; charset=utf-8\n");
+                      builder.append("\n");
+                      builder.append("Error: Unable to parse GitHub JSON response.");
+                  }
+              }
+          }
+        } else if(request.contains("concat?")) {
+          Map<String, String> query_pairs = splitQuery(request.replace("concat?", ""));
 
-          Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-          query_pairs = splitQuery(request.replace("github?", ""));
-          String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
-          System.out.println(json);
+          if(!query_pairs.containsKey("str1") || !query_pairs.containsKey("str2")) {
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error: Missing 'str1' or 'str2' parameter");
+          } else {
+            String str1 = query_pairs.get("str1");
+            String str2 = query_pairs.get("str2");
 
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Check the todos mentioned in the Java source file");
-          // TODO: Parse the JSON returned by your fetch and create an appropriate
-          // response based on what the assignment document asks for
+            if(!str1.matches("[a-zA-Z0-9 ]*") || !str2.matches("[a-zA-Z0-9 ]*")) {
+              builder.append("HTTP/1.1 406 Not Acceptable\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Error: Inputs must be alphanumeric");
+            } else {
+              String result = str1 + " " + str2;
 
-        } else {
-          // if the request is not recognized at all
+              builder.append("HTTP/1.1 200 OK\n");
+              builder.append("Content-Type: text/plain; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Concatenated Result: " + result);
+            }
+          }
+        } else if(request.contains("weather?")) {
+          Map<String, String> query_pairs = splitQuery(request.replace("weather?", ""));
 
+          if(!query_pairs.containsKey("city")) {
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error: Missing 'city' parameter.");
+          } else {
+            String city = query_pairs.get("city");
+            String unit = query_pairs.getOrDefault("unit", "metric"); // Default to metric
+
+            if(!unit.equals("metric") && !unit.equals("imperial")) {
+              builder.append("HTTP/1.1 406 Not Acceptable\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Error: 'unit' must be 'metric' or 'imperial'");
+            } else {
+              String weatherData = fetchURL("https://api.openweathermap.org/data/2.5/weather?q=" + city + "&units=" + unit + "&appid=YOUR_API_KEY");
+
+              if(weatherData == null || weatherData.isEmpty()) {
+                builder.append("HTTP/1.1 500 Internal Server Error\n");
+                builder.append("Content-Type: text/html; charset=utf-8\n");
+                builder.append("\n");
+                builder.append("Error: Could not retrieve weather data");
+              } else {
+                JSONObject weatherJson = new JSONObject(weatherData);
+                String temperature = weatherJson.getJSONObject("main").get("temp").toString();
+                String description = weatherJson.getJSONArray("weather").getJSONObject(0).getString("description");
+
+                builder.append("HTTP/1.1 200 OK\n");
+                builder.append("Content-Type: text/html; charset=utf-8\n");
+                builder.append("\n");
+                builder.append("<h2>Weather in " + city + "</h2>");
+                builder.append("<p>Temperature: " + temperature + "°</p>");
+                builder.append("<p>Description: " + description + "</p>");
+              }
+            }
+          }
+      } else {
           builder.append("HTTP/1.1 400 Bad Request\n");
           builder.append("Content-Type: text/html; charset=utf-8\n");
           builder.append("\n");
           builder.append("I am not sure what you want me to do...");
         }
 
-        // Output
         response = builder.toString().getBytes();
       }
-    } catch (IOException e) {
+    } catch(IOException e) {
       e.printStackTrace();
       response = ("<html>ERROR: " + e.getMessage() + "</html>").getBytes();
     }
 
     return response;
   }
+
+  private static String extractValue(String json, String startMarker, String endMarker) {
+    int startIndex = json.indexOf(startMarker);
+    if (startIndex == -1) {
+        return ""; // Key not found
+    }
+    startIndex += startMarker.length();
+    int endIndex = json.indexOf(endMarker, startIndex);
+    if (endIndex == -1) {
+        return ""; // Value not found
+    }
+    return json.substring(startIndex, endIndex);
+}
 
   /**
    * Method to read in a query and split it up correctly
